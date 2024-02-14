@@ -1,0 +1,18 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - run: wget https://dr-download.ti.com/software-development/ide-configuration-compiler-or-debugger/MD-sDOoXkUcde/20.2.7.LTS/ti_cgt_tms470_20.2.7.LTS_linux-x64_installer.bin -O ti_cgt.bin
+    - run: chmod +x ti_cgt.bin
+    - run: ./ti_cgt.bin
+    - run: TI_CGT_ROOT=./ti-cgt-arm_20.2.7.LTS make -j$(nproc)
+    - uses: actions/upload-artifact@v4.3.1
+      with:
+        path: build/CANnode.out
