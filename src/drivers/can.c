@@ -52,11 +52,11 @@ void can_init(canBASE_t *canreg) {
   canreg->CTL = (DCAN_CTL_SECDED_DISABLE << DCAN_CTL_SECDED_SHIFT) | (1U << DCAN_CTL_INIT_SHIFT) | (1U << DCAN_CTL_CCE_SHIFT);
 
   // 1 mbox for TX, 2-64 mboxes reserved for RX
-  for (int mbox = 2; mbox < 64; mbox++) {
+  for (int mbox = CAN_RX_QUEUE_FIRST_MBOX; mbox <= CAN_MBOX_LAST; mbox++) {
     can_if_wait_ready(canreg);
     canreg->IF1MSK = 1U << DCAN_IFMSK_MDIR_SHIFT;
     canreg->IF1ARB = (1U << DCAN_IFARB_MSGVAL_SHIFT) | (1U << DCAN_IFARB_XTD_SHIFT);
-    canreg->IF1MCTL = (1U << DCAN_IFMCTL_UMASK_SHIFT) | (1U << DCAN_IFMCTL_EOB_SHIFT) | (1U << DCAN_IFMCTL_RXIE_SHIFT);
+    canreg->IF1MCTL = (1U << DCAN_IFMCTL_UMASK_SHIFT) | ((mbox == 64) << DCAN_IFMCTL_EOB_SHIFT) | (1U << DCAN_IFMCTL_RXIE_SHIFT);
     canreg->IF1CMD = (1U << DCAN_IFCMD_WRRD_SHIFT) | (1U << DCAN_IFCMD_MASK_SHIFT) | (1U << DCAN_IFCMD_ARB_SHIFT) | (1U << DCAN_IFCMD_CONTROL_SHIFT) | (1U << DCAN_IFCMD_CLRINTPND_SHIFT);
     canreg->IF1NO = mbox;
   }
@@ -70,17 +70,11 @@ void can_init(canBASE_t *canreg) {
   canreg->CTL &= ~((1U << DCAN_CTL_INIT_SHIFT) | (1U << DCAN_CTL_CCE_SHIFT));
 }
 
-uint8_t can_get_rx_ready_mbox(canBASE_t *canreg) {
-  uint32_t mbox = canreg->INT;
-  if (mbox & 0x8000U) {
-    for (;;)
-      ;
+bool can_mbox_has_data(canBASE_t *canreg, uint8_t mbox) {
+  if (mbox > CAN_MBOX_LAST) {
+    return false;
   }
-  return mbox;
-}
 
-void can_fill_rx_mbox(canBASE_t *canreg, uint8_t mbox, uint32_t *id,
-                      uint8_t *len, uint8_t *data) {
   can_if_wait_ready(canreg);
   canreg->IF1CMD =
       (1U << DCAN_IFCMD_ARB_SHIFT) | (1U << DCAN_IFCMD_CONTROL_SHIFT) |
@@ -88,7 +82,11 @@ void can_fill_rx_mbox(canBASE_t *canreg, uint8_t mbox, uint32_t *id,
       (1U << DCAN_IFCMD_DATAA_SHIFT) | (1U << DCAN_IFCMD_DATAB_SHIFT);
   canreg->IF1NO = mbox;
   can_if_wait_ready(canreg);
+  return canreg->IF1MCTL & (1U << DCAN_IFMCTL_NEWDAT_SHIFT);
+}
 
+void can_fill_rx_mbox(canBASE_t *canreg, uint8_t mbox, uint32_t *id,
+                      uint8_t *len, uint8_t *data) {
   *id = canreg->IF1ARB & 0x1FFFFFFFU;
   if (!(canreg->IF1ARB & (1U << DCAN_IFARB_XTD_SHIFT))) {
     *id >>= 18;

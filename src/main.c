@@ -48,18 +48,16 @@ void on_can_transmit(cannelloni_handle_t *cannelloni, struct canfd_frame *frame)
 void on_can_receive(cannelloni_handle_t *cannelloni) {
   struct CANInterface *iface = cannelloni;
   canBASE_t *canreg = iface->canreg;
-  for (;;) {
-    uint8_t mbox = can_get_rx_ready_mbox(canreg);
-    if (mbox == 0) {
-      break;
-    }
 
+  uint8_t mbox = 2;
+  while (can_mbox_has_data(canreg, mbox)) {
     struct canfd_frame *frame = get_can_rx_frame(cannelloni);
     if (!frame) {
-      break;
+      return;
     }
 
     can_fill_rx_mbox(canreg, mbox, &frame->can_id, &frame->len, frame->data);
+    mbox++;
   }
 }
 
