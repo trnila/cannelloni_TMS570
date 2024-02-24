@@ -85,7 +85,7 @@ int main(void) {
   IP4_ADDR(&net_mask, 255, 255, 255, 0);
   IP4_ADDR(&gw_addr, 0, 0, 0, 0);
 
-  uint8_t mac[] = {0x11U, 0x22U, 0x33U, 0x44U, 0x55U, node_id()};
+  uint8_t mac[] = {0x12U, 0x22U, 0x33U, 0x44U, 0x55U, node_id()};
   lwip_init();
   hdkif_macaddrset(instNum, mac);
   netif_add(&netif, &ip_addr, &net_mask, &gw_addr, &instNum, hdkif_init, ip_input);
