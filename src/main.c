@@ -12,7 +12,7 @@
 #include "cannelloni.h"
 
 #define CAN_IFACES 4
-#define CNL_BUF_SIZE 16
+#define CNL_BUF_SIZE 128
 
 extern struct netif netif;
 int instNum = 0;
