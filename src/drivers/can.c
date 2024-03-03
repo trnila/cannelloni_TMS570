@@ -38,7 +38,7 @@
 #define DCAN_BTR_TSEG2_SHIFT 12
 #define DCAN_BTR_BRPE_SHIFT 16
 
-#define DCAN_IOC_PU_SHIFT 17
+#define DCAN_IOC_PU_SHIFT 18
 #define DCAN_IOC_FUNC_SHIFT 3
 
 static const uint32_t data_byte_order[8U] = {3U, 2U, 1U, 0U, 7U, 6U, 5U, 4U};
