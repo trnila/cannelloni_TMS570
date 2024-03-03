@@ -40,9 +40,9 @@ uint8_t node_id() {
   }
 }
 
-void on_can_transmit(cannelloni_handle_t *cannelloni, struct canfd_frame *frame) {
+bool on_can_transmit(cannelloni_handle_t *cannelloni, struct canfd_frame *frame) {
   struct CANInterface *iface = cannelloni;
-  can_send(iface->canreg, frame->can_id, frame->len, frame->data);
+  return can_send(iface->canreg, frame->can_id, frame->len, frame->data);
 }
 
 void on_can_receive(cannelloni_handle_t *cannelloni) {

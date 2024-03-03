@@ -98,9 +98,16 @@ void can_fill_rx_mbox(canBASE_t *canreg, uint8_t mbox, uint32_t *id,
   }
 }
 
-void can_send(canBASE_t *canreg, uint32_t id, uint8_t dlc,
-              const uint8_t *data) {
-  // TODO: find unused mailbox
+bool can_send(canBASE_t *canreg, uint32_t id, uint8_t dlc, const uint8_t *data) {
+  uint32_t mbox = 1;
+
+  // check if mailbox is free
+  uint32_t regIndex = (mbox - 1U) >> 5U;
+  uint32_t bit = 1U << ((mbox - 1U) & 0x1FU);
+  if ((canreg->TXRQx[regIndex] & bit) != 0U) {
+    return false;
+  }
+
   can_if_wait_ready(canreg);
 
   canreg->IF1ARB = (1U << DCAN_IFARB_MSGVAL_SHIFT) |
@@ -116,4 +123,5 @@ void can_send(canBASE_t *canreg, uint32_t id, uint8_t dlc,
   }
   canreg->IF1CMD = (uint8_t)0xFFU;
   canreg->IF1NO = 1;
+  return true;
 }

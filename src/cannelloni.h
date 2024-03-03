@@ -22,6 +22,7 @@
 #define _CANNELLONI_H
 
 #include "stdint.h"
+#include "stdbool.h"
 #include "ip_addr.h"
 #include "pbuf.h"
 
@@ -80,7 +81,7 @@ typedef struct {
 
 typedef struct cannelloni_handle cannelloni_handle_t;
 
-typedef void (*cnl_can_tx_fn)(cannelloni_handle_t *const, struct canfd_frame *const);
+typedef bool (*cnl_can_tx_fn)(cannelloni_handle_t *const, struct canfd_frame *const);
 typedef void (*cnl_can_rx_fn)(cannelloni_handle_t *const);
 
 typedef struct cannelloni_handle {
