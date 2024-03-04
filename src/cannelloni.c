@@ -79,10 +79,9 @@ void init_cannelloni(cannelloni_handle_t *handle) {
 void handle_cannelloni_frame(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *addr, uint16_t port) {
   cannelloni_handle_t *const handle = (cannelloni_handle_t *const)arg;
   if (p != NULL && p->tot_len > CANNELLONI_DATA_PACKET_BASE_SIZE) {
-    struct cannelloni_data_packet *data;
+    struct cannelloni_data_packet *data = (struct cannelloni_data_packet *)p->payload;
     uint8_t error = 0;
     /* Check for OP Code */
-    data = (struct cannelloni_data_packet *)p->payload;
     if (data->version != CANNELLONI_FRAME_VERSION) {
       /* Received wrong version */
       error = 1;
@@ -92,11 +91,12 @@ void handle_cannelloni_frame(void *arg, struct udp_pcb *pcb, struct pbuf *p, con
       error = 1;
     }
     if (!error) {
-      uint8_t *rawData = ((uint8_t *)p->payload) + CANNELLONI_DATA_PACKET_BASE_SIZE;
+      uint16_t pos = CANNELLONI_DATA_PACKET_BASE_SIZE;
+      uint8_t *rawData = (uint8_t *)p->payload;
       handle->udp_rx_count++;
       uint16_t i = 0;
       for (i = 0; i < ntohs(data->count); i++) {
-        if (rawData - (uint8_t *)(p->payload) + CANNELLONI_FRAME_BASE_SIZE > p->tot_len) {
+        if (pos + CANNELLONI_FRAME_BASE_SIZE > p->tot_len) {
           /* Received incomplete packet */
           error = 1;
           break;
@@ -108,30 +108,26 @@ void handle_cannelloni_frame(void *arg, struct udp_pcb *pcb, struct pbuf *p, con
           error = 1;
           break;
         }
-        uint32_t debug = (rawData[0] << 24) | (rawData[1] << 16) | (rawData[2] << 8) | (rawData[3]);
-        // debug = (uint32_t*)*rawData;
-        frame->can_id = debug;
-        /* += 4 */
-        rawData += sizeof(canid_t);
-        frame->len = *rawData;
-        /* += 1 */
-        rawData += sizeof(frame->len);
+        frame->can_id = (rawData[pos] << 24) | (rawData[pos + 1] << 16) | (rawData[pos + 2] << 8) | (rawData[pos + 3]);
+        ;
+        pos += sizeof(canid_t);
+
+        frame->len = rawData[pos++];
+
         /* If this is a CAN FD frame, also retrieve the flags */
         if (frame->len & CANFD_FRAME) {
-          frame->flags = *rawData;
-          /* += 1 */
-          rawData += sizeof(frame->flags);
+          frame->flags = rawData[pos++];
         }
         /* RTR Frames have no data section although they have a dlc */
         if ((frame->can_id & CAN_RTR_FLAG) == 0) {
           /* Check again now that we know the dlc */
-          if (rawData - (uint8_t *)(p->payload) + canfd_len(frame) > p->tot_len) {
+          if (pos + canfd_len(frame) > p->tot_len) {
             /* Received incomplete packet / can header corrupt! */
             error = 1;
             break;
           }
-          memcpy(frame->data, rawData, canfd_len(frame));
-          rawData += canfd_len(frame);
+          memcpy(frame->data, rawData + pos, canfd_len(frame));
+          pos += canfd_len(frame);
         }
       }
     }
