@@ -49,7 +49,7 @@ void on_can_receive(cannelloni_handle_t *cannelloni) {
   struct CANInterface *iface = cannelloni;
   canBASE_t *canreg = iface->canreg;
 
-  uint8_t mbox = 2;
+  uint8_t mbox = CAN_RX_QUEUE_FIRST_MBOX;
   while (can_mbox_has_data(canreg, mbox)) {
     struct canfd_frame *frame = get_can_rx_frame(cannelloni);
     if (!frame) {
