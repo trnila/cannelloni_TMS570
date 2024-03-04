@@ -1,8 +1,13 @@
 #include "can.h"
 
+#define CAN_MSGID_EXTENDED (1U << 31)
+#define CAN_MSGID_XTD_MASK ((1U << 29) - 1U)
+#define CAN_MSGID_STD_MASK ((1U << 11) - 1U)
+
 #define DCAN_IFARB_MSGVAL_SHIFT 31
 #define DCAN_IFARB_XTD_SHIFT 30
 #define DCAN_IFARB_DIR_SHIFT 29
+#define DCAN_IFARB_ID_STD_SHIFT 18
 
 #define DCAN_IFMCTL_NEWDAT_SHIFT 15
 #define DCAN_IFMCTL_MSGLST_SHIFT 14
@@ -90,6 +95,8 @@ void can_fill_rx_mbox(canBASE_t *canreg, uint8_t mbox, uint32_t *id,
   *id = canreg->IF1ARB & 0x1FFFFFFFU;
   if (!(canreg->IF1ARB & (1U << DCAN_IFARB_XTD_SHIFT))) {
     *id >>= 18;
+  } else {
+    *id |= CAN_MSGID_EXTENDED;
   }
 
   *len = canreg->IF1MCTL & 0b1111;
@@ -110,9 +117,12 @@ bool can_send(canBASE_t *canreg, uint32_t id, uint8_t dlc, const uint8_t *data) 
 
   can_if_wait_ready(canreg);
 
-  canreg->IF1ARB = (1U << DCAN_IFARB_MSGVAL_SHIFT) |
-                   (1U << DCAN_IFARB_XTD_SHIFT) | (1U << DCAN_IFARB_DIR_SHIFT) |
-                   (id & 0x1FFFFFFFU);
+  canreg->IF1ARB = (1U << DCAN_IFARB_MSGVAL_SHIFT) | (1U << DCAN_IFARB_DIR_SHIFT);
+  if (id & CAN_MSGID_EXTENDED) {
+    canreg->IF1ARB |= (1U << DCAN_IFARB_XTD_SHIFT) | (id & CAN_MSGID_XTD_MASK);
+  } else {
+    canreg->IF1ARB |= (id & CAN_MSGID_STD_MASK) << DCAN_IFARB_ID_STD_SHIFT;
+  }
 
   canreg->IF1MCTL = (1U << DCAN_IFMCTL_NEWDAT_SHIFT) |
                     (1U << DCAN_IFMCTL_TXRQST_SHIFT) |
