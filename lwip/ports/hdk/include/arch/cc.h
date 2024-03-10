@@ -74,16 +74,12 @@
 #define PACK_STRUCT_FIELD(x) x
 #endif
 
-#ifdef DEBUG
-extern void __error__(char *pcFilename, unsigned long ulLine);
-#define LWIP_PLATFORM_ASSERT(expr)   \
-  {                                  \
-    if (!(expr)) {                   \
-      __error__(__FILE__, __LINE__); \
-    }                                \
+#define LWIP_PLATFORM_ASSERT(expr) \
+  {                                \
+    _disable_IRQ();                \
+    asm(" BKPT #0");               \
+    for (;;)                       \
+      ;                            \
   }
-#else
-#define LWIP_PLATFORM_ASSERT(expr)
-#endif
 
 #endif /* __CC_H__ */
