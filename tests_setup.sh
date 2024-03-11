@@ -1,13 +1,9 @@
 #!/bin/bash
 set -ex
-netif=wifi
 
 sudo ip link set can0 down
 sudo ip link set can0 type can bitrate 500000
 sudo ip link set can0 up
-
-sudo ip link set "$netif" up
-sudo ip addr add 10.0.0.10/24 dev "$netif" || true
 
 create_vcan() {
   sudo ip link add name "$1" type vcan || true

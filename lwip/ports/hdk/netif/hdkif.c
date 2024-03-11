@@ -45,7 +45,7 @@
 #include "lwip/sys.h"
 #include "lwip/stats.h"
 #include "lwip/snmp.h"
-#include "netif/etharp.h"
+#include "lwip/ethip6.h"
 #include "lwip/err.h"
 #include "netif/hdkif.h"
 #include "arch/cc.h"
@@ -55,6 +55,7 @@
 #include "HL_reg_system.h"
 #include "drivers/vim.h"
 
+#define ETHARP_HWADDR_LEN 6
 #define MAX_TRANSFER_UNIT 1514U
 #define MAX_RX_PBUF_ALLOC 10U
 #define MIN_PKT_LEN 60U
@@ -542,8 +543,7 @@ static err_t hdkif_hw_init(struct netif *netif) {
   netif->mtu = MAX_TRANSFER_UNIT;
 
   /* device capabilities */
-  /* don't set NETIF_FLAG_ETHARP if this device is not an ethernet one */
-  netif->flags = NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_LINK_UP;
+  netif->flags = NETIF_FLAG_BROADCAST | NETIF_FLAG_LINK_UP | NETIF_FLAG_MLD6;
 
   EMACInit(hdkif->emac_ctrl_base, hdkif->emac_base);
   EMACMACSrcAddrSet(hdkif->emac_base, netif->hwaddr);
@@ -688,14 +688,8 @@ err_t hdkif_init(struct netif *netif) {
   netif->name[1] = 'n';
 
   netif->num = (uint8_t)inst_num;
-
-  /* We directly use etharp_output() here to save a function call.
-   * You can instead declare your own function an call etharp_output()
-   * from it if you have to do some checks before sending (e.g. if link
-   * is available...)
-   */
-  netif->output = etharp_output;
   netif->linkoutput = hdkif_output;
+  netif->output_ip6 = ethip6_output;
 
   /* initialize the hardware */
   hdkif_inst_config(hdkif);

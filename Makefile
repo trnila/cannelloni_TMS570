@@ -52,10 +52,12 @@ OBJS = \
 	lwip/src/core/inet_chksum.obj \
 	lwip/src/core/init.obj \
 	lwip/src/core/ip.obj \
-	lwip/src/core/ipv4/etharp.obj \
-	lwip/src/core/ipv4/icmp.obj \
-	lwip/src/core/ipv4/ip4_addr.obj \
-	lwip/src/core/ipv4/ip4.obj \
+	lwip/src/core/ipv6/ip6.obj \
+	lwip/src/core/ipv6/icmp6.obj \
+	lwip/src/core/ipv6/mld6.obj \
+	lwip/src/core/ipv6/nd6.obj \
+	lwip/src/core/ipv6/ip6_addr.obj \
+	lwip/src/core/ipv6/ethip6.obj \
 	lwip/src/core/mem.obj \
 	lwip/src/core/memp.obj \
 	lwip/src/core/netif.obj \

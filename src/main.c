@@ -78,22 +78,17 @@ int main(void) {
   gio_mode_output(gioPORTA, 2, 1);  // CAN3_EN
   gio_mode_output(gioPORTA, 3, 1);  // CAN4_EN
 
-  ip_addr_t ip_addr;
-  ip_addr_t net_mask;
-  ip_addr_t gw_addr;
-  IP4_ADDR(&ip_addr, 10, 0, 0, node_id() + 1);
-  IP4_ADDR(&net_mask, 255, 255, 255, 0);
-  IP4_ADDR(&gw_addr, 0, 0, 0, 0);
-
   lwip_init();
-  netif_add(&netif, &ip_addr, &net_mask, &gw_addr, &instNum, hdkif_init, ip_input);
+  netif_add(&netif, &instNum, hdkif_init, ip_input);
+  netif_create_ip6_linklocal_address(&netif, 0);
   netif_set_default(&netif);
   netif_set_up(&netif);
 
   for (int i = 0; i < CAN_IFACES; i++) {
     struct CANInterface *can_iface = &can_interfaces[i];
     cannelloni_handle_t *cannelloni = &can_iface->cannelloni;
-    IP4_ADDR(&cannelloni->Init.addr, 10, 0, 0, 10);
+    IP_ADDR6(&cannelloni->Init.addr, 0xfe800000, 0x00000000, 0x5eb003c7, 0x958bfc58);
+
     cannelloni->Init.can_buf_size = CNL_BUF_SIZE;
     cannelloni->Init.can_rx_buf = can_interfaces->rx_buf;
     cannelloni->Init.can_rx_fn = on_can_receive;

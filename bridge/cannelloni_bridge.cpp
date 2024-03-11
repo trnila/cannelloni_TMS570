@@ -77,24 +77,30 @@ class CANEndpoint : public Endpoint {
 class UDPEndpoint : public Endpoint {
  public:
   UDPEndpoint(const char *addr, uint16_t port) {
-    fd = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
+    fd = socket(AF_INET6, SOCK_DGRAM | SOCK_NONBLOCK, 0);
     if (fd < 0) {
       perror("socket creation failed");
       exit(1);
     }
 
-    struct sockaddr_in server_addr = {};
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    server_addr.sin_port = htons(port);
+    char *iface = "eth";
+    if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, iface, strlen(iface) + 1) < 0) {
+      perror("setsockopt(SO_BINDTODEVICE) failed");
+      exit(1);
+    }
+
+    struct sockaddr_in6 server_addr = {};
+    server_addr.sin6_family = AF_INET6;
+    server_addr.sin6_addr = in6addr_any;
+    server_addr.sin6_port = htons(port);
     if (bind(fd, (const struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
       perror("bind failed");
       exit(1);
     }
 
-    dst.sin_family = AF_INET;
-    dst.sin_port = htons(port);
-    inet_pton(AF_INET, addr, &dst.sin_addr);
+    dst.sin6_family = AF_INET6;
+    dst.sin6_port = htons(port);
+    inet_pton(AF_INET6, addr, &dst.sin6_addr);
   }
 
   void read(std::vector<struct can_frame> &frames) override {
@@ -148,11 +154,15 @@ class UDPEndpoint : public Endpoint {
       pos += frame.can_dlc;
     }
 
-    sendto(fd, tx, pos, 0, (struct sockaddr *)&dst, sizeof(dst));
+    ssize_t n = sendto(fd, tx, pos, 0, (struct sockaddr *)&dst, sizeof(dst));
+    if (n != pos) {
+      perror("UDP sendto failed");
+      exit(1);
+    }
   }
 
  private:
-  struct sockaddr_in dst;
+  struct sockaddr_in6 dst;
 };
 
 struct Bridge {
@@ -235,5 +245,6 @@ int main(int argc, char **argv) {
     *pos2 = '\0';
     runner.add(argv[i], pos1 + 1, atoi(pos2 + 1));
   }
+  runner.add("can-0-0", "fe80::1222:3344:5500", 20000);
   runner.run();
 }
