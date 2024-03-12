@@ -52,6 +52,7 @@
 #include "HL_hw_reg_access.h"
 #include "HL_hw_emac.h"
 #include "HL_hw_emac_ctrl.h"
+#include "HL_reg_system.h"
 #include "drivers/vim.h"
 
 #define MAX_TRANSFER_UNIT 1514U
@@ -135,8 +136,6 @@ struct txch {
 struct hdkif {
   /* emac instance number */
   uint32_t inst_num;
-
-  uint8_t mac_addr[6];
 
   /* emac base address */
   uint32_t emac_base;
@@ -306,20 +305,15 @@ void EMACInit(uint32_t emacCtrlBase, uint32_t emacBase) {
 
 /**
  * \brief   Sets the MAC Address in MACSRCADDR registers.
- *
-
  * \param   macAddr       Start address of a MAC address array.
- *                        The array[0] shall be the LSB of the MAC address
- *
-
- *
+ *                        The array[0] shall be the MSB of the MAC address
  **/
 void EMACMACSrcAddrSet(uint32_t emacBase, uint8_t macAddr[6]) {
   HWREG(emacBase + EMAC_MACSRCADDRHI) =
-      ((uint32_t)macAddr[5U] | ((uint32_t)macAddr[4U] << 8U) |
-       ((uint32_t)macAddr[3U] << 16U) | ((uint32_t)macAddr[2U] << 24U));
+      ((uint32_t)macAddr[0U] | ((uint32_t)macAddr[1U] << 8U) |
+       ((uint32_t)macAddr[2U] << 16U) | ((uint32_t)macAddr[3U] << 24U));
   HWREG(emacBase + EMAC_MACSRCADDRLO) =
-      ((uint32_t)macAddr[1U] | ((uint32_t)macAddr[0U] << 8U));
+      ((uint32_t)macAddr[4U] | ((uint32_t)macAddr[5U] << 8U));
 }
 
 /**
@@ -327,7 +321,7 @@ void EMACMACSrcAddrSet(uint32_t emacBase, uint8_t macAddr[6]) {
  * \param   channel       Channel Number
  * \param   matchFilt     Match or Filter
  * \param   macAddr       Start address of a MAC address array.
- *                        The array[0] shall be the LSB of the MAC address
+ *                        The array[0] shall be the MSB of the MAC address
  *          matchFilt can take the following values \n
  *          EMAC_MACADDR_NO_MATCH_NO_FILTER - Address is not used to match
  *                                             or filter incoming packet. \n
@@ -339,10 +333,10 @@ void EMACMACAddrSet(uint32_t emacBase, uint32_t channel, uint8_t macAddr[6],
   HWREG(emacBase + EMAC_MACINDEX) = channel;
 
   HWREG(emacBase + EMAC_MACADDRHI) =
-      ((uint32_t)macAddr[5U] | ((uint32_t)macAddr[4U] << 8U) |
-       ((uint32_t)macAddr[3U] << 16U) | ((uint32_t)macAddr[2U] << 24U));
+      ((uint32_t)macAddr[0U] | ((uint32_t)macAddr[1U] << 8U) |
+       ((uint32_t)macAddr[2U] << 16U) | ((uint32_t)macAddr[3U] << 24U));
   HWREG(emacBase + EMAC_MACADDRLO) =
-      ((uint32_t)macAddr[1U] | ((uint32_t)macAddr[0U] << 8U) | matchFilt |
+      ((uint32_t)macAddr[4U] | ((uint32_t)macAddr[5U] << 8U) | matchFilt |
        (channel << 16U));
 }
 
@@ -439,22 +433,6 @@ struct emac_tx_bdp *hdkif_swizzle_txp(volatile struct emac_tx_bdp *p) {
 
 struct emac_rx_bdp *hdkif_swizzle_rxp(volatile struct emac_rx_bdp *p) {
   return (struct emac_rx_bdp *)hdkif_swizzle_data((uint32_t)p);
-}
-/**
- * Function to set the MAC address to the interface
- * @param   inst_num the instance number
- * @return  none.
- */
-void hdkif_macaddrset(uint32_t inst_num, uint8_t *mac_addr) {
-  struct hdkif *hdkif;
-  uint32_t temp;
-
-  hdkif = &hdkif_data[inst_num];
-
-  /* set MAC hardware address */
-  for (temp = 0; temp < ETHARP_HWADDR_LEN; temp++) {
-    hdkif->mac_addr[temp] = mac_addr[(ETHARP_HWADDR_LEN - 1) - temp];
-  }
 }
 
 /**
@@ -594,7 +572,7 @@ static err_t hdkif_output(struct netif *netif, struct pbuf *p) {
  *        for this ethernetif
  */
 static err_t hdkif_hw_init(struct netif *netif) {
-  uint32_t temp, channel;
+  uint32_t channel;
   uint32_t num_bd, pbuf_cnt = 0;
   volatile uint32_t phyID = 0;
   volatile uint32_t delay = 0xfff;
@@ -612,9 +590,12 @@ static err_t hdkif_hw_init(struct netif *netif) {
   netif->hwaddr_len = ETHARP_HWADDR_LEN;
 
   /* set MAC hardware address */
-  for (temp = 0; temp < ETHARP_HWADDR_LEN; temp++) {
-    netif->hwaddr[temp] = hdkif->mac_addr[(ETHARP_HWADDR_LEN - 1) - temp];
-  }
+  netif->hwaddr[0] = 0x02;  // unicast + locally administered MAC
+  netif->hwaddr[1] = 0x00;
+  netif->hwaddr[2] = systemREG2->DIEIDL_REG0 >> 24;
+  netif->hwaddr[3] = systemREG2->DIEIDL_REG0 >> 16;
+  netif->hwaddr[4] = systemREG2->DIEIDL_REG0 >> 8;
+  netif->hwaddr[5] = systemREG2->DIEIDL_REG0;
 
   /* maximum transfer unit */
   netif->mtu = MAX_TRANSFER_UNIT;
@@ -627,10 +608,10 @@ static err_t hdkif_hw_init(struct netif *netif) {
   EMACRxBroadCastEnable(hdkif->emac_base, 0);
 
   /* Set the MAC Addresses in EMAC hardware */
-  EMACMACSrcAddrSet(hdkif->emac_base, hdkif->mac_addr);
+  EMACMACSrcAddrSet(hdkif->emac_base, netif->hwaddr);
 
   for (channel = 0; channel < 8; channel++) {
-    EMACMACAddrSet(hdkif->emac_base, channel, hdkif->mac_addr,
+    EMACMACAddrSet(hdkif->emac_base, channel, netif->hwaddr,
                    EMAC_MACADDR_MATCH);
   }
 

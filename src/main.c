@@ -85,10 +85,7 @@ int main(void) {
   IP4_ADDR(&net_mask, 255, 255, 255, 0);
   IP4_ADDR(&gw_addr, 0, 0, 0, 0);
 
-  // unicast + locally administered MAC - 0x02
-  uint8_t mac[] = {0x02, 0x00, systemREG2->DIEIDL_REG0 >> 24, systemREG2->DIEIDL_REG0 >> 16, systemREG2->DIEIDL_REG0 >> 8, systemREG2->DIEIDL_REG0};
   lwip_init();
-  hdkif_macaddrset(instNum, mac);
   netif_add(&netif, &ip_addr, &net_mask, &gw_addr, &instNum, hdkif_init, ip_input);
   netif_set_default(&netif);
   netif_set_up(&netif);
