@@ -2,7 +2,7 @@
 #include "arch/sys_arch.h"
 
 #define LWIP_IPV6 1
-#define LWIP_IPV6_AUTOCONFIG 1
+#define LWIP_IPV6_AUTOCONFIG 0
 #define LWIP_MULTICAST_PING 1
 #define LWIP_IPV6_MLD 1
 #define LWIP_IPV6_REASS 0
@@ -18,5 +18,11 @@
 #define PBUF_POOL_BUFSIZE 1400
 #define PBUF_POOL_SIZE 16
 #define SYS_LIGHTWEIGHT_PROT 1
+#define LWIP_MDNS_RESPONDER 1
+#define LWIP_IGMP 1
+#define LWIP_RAND() rand()
+#define LWIP_NUM_NETIF_CLIENT_DATA 1
+#define MEMP_NUM_SYS_TIMEOUT 8
+#define MDNS_MAX_SERVICES 4
 #define LWIP_SKIP_PACKING_CHECK 1
 #define LWIP_SINGLE_NETIF 1

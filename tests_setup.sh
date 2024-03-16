@@ -10,13 +10,12 @@ create_vcan() {
   sudo ip link set "$1" up
 }
 
-create_vcan can-0-0
-create_vcan can-0-1
-create_vcan can-0-2
-create_vcan can-0-3
+for node in 0 1 2; do
+  create_vcan can-$node-0
+  create_vcan can-$node-1
+  create_vcan can-$node-2
+  create_vcan can-$node-3
+done
 
-./bridge/cannelloni_bridge \
-  can-0-0:10.0.0.1:20000 \
-  can-0-1:10.0.0.1:20001 \
-  can-0-2:10.0.0.1:20002 \
-  can-0-3:10.0.0.1:20003
+make -C bridge
+./bridge/cannelloni_bridge

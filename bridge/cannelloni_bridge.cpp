@@ -13,6 +13,16 @@
 #include <map>
 #include <utility>
 #include <memory>
+#include <thread>
+#include <avahi-client/client.h>
+#include <avahi-client/lookup.h>
+#include <avahi-common/error.h>
+#include <avahi-common/malloc.h>
+#include <avahi-common/simple-watch.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <sstream>
 
 class Endpoint {
  public:
@@ -77,30 +87,52 @@ class CANEndpoint : public Endpoint {
 class UDPEndpoint : public Endpoint {
  public:
   UDPEndpoint(const char *addr, uint16_t port) {
+    char service[16];
+    snprintf(service, sizeof(service), "%d", port);
+    struct addrinfo hints = {};
+    hints.ai_family = AF_INET6;
+    hints.ai_socktype = SOCK_DGRAM;
+    struct addrinfo *res = nullptr;
+    if (getaddrinfo(addr, service, &hints, &res) != 0) {
+      perror("getaddrinfo");
+      exit(1);
+    }
+
     fd = socket(AF_INET6, SOCK_DGRAM | SOCK_NONBLOCK, 0);
     if (fd < 0) {
       perror("socket creation failed");
       exit(1);
     }
 
-    char *iface = "eth";
-    if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, iface, strlen(iface) + 1) < 0) {
-      perror("setsockopt(SO_BINDTODEVICE) failed");
+    int enabled = 1;
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &enabled, sizeof(enabled)) != 0) {
+      perror("setsockopt(SOL_SOCKET, SO_REUSEADDR)");
       exit(1);
     }
 
-    struct sockaddr_in6 server_addr = {};
-    server_addr.sin6_family = AF_INET6;
-    server_addr.sin6_addr = in6addr_any;
-    server_addr.sin6_port = htons(port);
+    struct sockaddr_in6 server_addr;
+    memcpy(&server_addr, res->ai_addr, res->ai_addrlen);
+    server_addr.sin6_addr.s6_addr16[0] = htons(0xff02);
     if (bind(fd, (const struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
       perror("bind failed");
       exit(1);
     }
 
-    dst.sin6_family = AF_INET6;
-    dst.sin6_port = htons(port);
-    inet_pton(AF_INET6, addr, &dst.sin6_addr);
+    struct ipv6_mreq mreq = {};
+    mreq.ipv6mr_multiaddr = server_addr.sin6_addr;
+    mreq.ipv6mr_interface = server_addr.sin6_scope_id;
+    if (setsockopt(fd, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq)) != 0) {
+      perror("setsockopt(PPROTO_IPV6, IPV6_JOIN_GROUP)");
+      exit(1);
+    }
+
+    if (sizeof(dst) != res->ai_addrlen) {
+      fprintf(stderr, "Wrong address size %ld != %ld\n", sizeof(dst.sin6_addr), res->ai_addrlen);
+      exit(1);
+    }
+    memcpy(&dst, res->ai_addr, res->ai_addrlen);
+
+    freeaddrinfo(res);
   }
 
   void read(std::vector<struct can_frame> &frames) override {
@@ -231,8 +263,104 @@ class Runner {
   }
 };
 
+class Discovery {
+ public:
+  Discovery(Runner &runner) : runner(runner) {
+    AvahiSimplePoll *simple_poll = avahi_simple_poll_new();
+    if (!simple_poll) {
+      fprintf(stderr, "Failed to create simple poll object.\n");
+      exit(1);
+    }
+
+    int error = 0;
+    client = avahi_client_new(avahi_simple_poll_get(simple_poll), (AvahiClientFlags)0, NULL, NULL, &error);
+    if (!client) {
+      fprintf(stderr, "Failed to create client: %s\n", avahi_strerror(error));
+      exit(1);
+    }
+
+    AvahiServiceBrowser *sb = avahi_service_browser_new(client, AVAHI_IF_UNSPEC, AVAHI_PROTO_INET6, "_cannelloni._udp", NULL, (AvahiLookupFlags)0, browse_callback, this);
+    if (!sb) {
+      fprintf(stderr, "Failed to create service browser: %s\n", avahi_strerror(avahi_client_errno(client)));
+      exit(1);
+    }
+
+    avahi_thread = std::thread([&] { avahi_simple_poll_loop(simple_poll); });
+  }
+
+  static void resolve_callback(
+      AvahiServiceResolver *r,
+      AVAHI_GCC_UNUSED AvahiIfIndex interface,
+      AVAHI_GCC_UNUSED AvahiProtocol protocol,
+      AvahiResolverEvent event,
+      const char *name,
+      const char *type,
+      const char *domain,
+      const char *host_name,
+      const AvahiAddress *address,
+      uint16_t port,
+      AvahiStringList *txt,
+      AvahiLookupResultFlags flags,
+      void *userdata) {
+    auto *discovery = static_cast<Discovery *>(userdata);
+
+    switch (event) {
+      case AVAHI_RESOLVER_FAILURE:
+        fprintf(stderr, "Failed to resolve service '%s' of type '%s' in domain '%s': %s\n", name, type, domain, avahi_strerror(avahi_client_errno(avahi_service_resolver_get_client(r))));
+        break;
+
+      case AVAHI_RESOLVER_FOUND: {
+        char address_str[AVAHI_ADDRESS_STR_MAX];
+        avahi_address_snprint(address_str, sizeof(address_str), address);
+        char ifname[IF_NAMESIZE];
+        if (!if_indextoname(interface, ifname)) {
+          perror("if_indextoname");
+          exit(1);
+        }
+
+        std::stringstream ss;
+        ss << address_str << '%' << ifname;
+
+        discovery->runner.add(name, ss.str().c_str(), port);
+      }
+    }
+
+    avahi_service_resolver_free(r);
+  }
+
+  static void browse_callback(
+      AvahiServiceBrowser *b,
+      AvahiIfIndex interface,
+      AvahiProtocol protocol,
+      AvahiBrowserEvent event,
+      const char *name,
+      const char *type,
+      const char *domain,
+      AvahiLookupResultFlags flags,
+      void *userdata) {
+    switch (event) {
+      case AVAHI_BROWSER_FAILURE:
+        fprintf(stderr, "Browser failure: %s\n", avahi_strerror(avahi_client_errno(avahi_service_browser_get_client(b))));
+        break;
+
+      case AVAHI_BROWSER_NEW:
+        Discovery *discovery = static_cast<Discovery *>(userdata);
+        if (!(avahi_service_resolver_new(discovery->client, interface, protocol, name, type, domain, AVAHI_PROTO_UNSPEC, (AvahiLookupFlags)0, resolve_callback, discovery))) {
+          fprintf(stderr, "Failed to resolve service '%s': %s\n", name, avahi_strerror(avahi_client_errno(discovery->client)));
+        }
+        break;
+    }
+  }
+
+ private:
+  AvahiClient *client;
+  std::thread avahi_thread;
+  Runner &runner;
+};
+
 int main(int argc, char **argv) {
   Runner runner;
+  Discovery discovery(runner);
 
   for (int i = 1; i < argc; i++) {
     char *pos1 = strchr(argv[i], ':');
@@ -245,6 +373,6 @@ int main(int argc, char **argv) {
     *pos2 = '\0';
     runner.add(argv[i], pos1 + 1, atoi(pos2 + 1));
   }
-  runner.add("can-0-0", "fe80::1222:3344:5500", 20000);
+
   runner.run();
 }

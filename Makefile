@@ -65,7 +65,10 @@ OBJS = \
 	lwip/src/core/sys.obj \
 	lwip/src/core/timeouts.obj \
 	lwip/src/core/udp.obj \
-	lwip/src/netif/ethernet.obj
+	lwip/src/netif/ethernet.obj \
+	lwip/apps/mdns/mdns.obj \
+	lwip/apps/mdns/mdns_domain.obj \
+	lwip/apps/mdns/mdns_out.obj
 
 
 all: $(BUILD_DIR)/$(TARGET)

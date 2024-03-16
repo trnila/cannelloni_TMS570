@@ -1,6 +1,8 @@
+#include <string.h>
 #include "lwip/init.h"
 #include "lwip/ip.h"
 #include "lwip/timeouts.h"
+#include "lwip/apps/mdns.h"
 #include "HL_reg_het.h"
 #include "HL_system.h"
 #include "netif/hdkif.h"
@@ -84,10 +86,18 @@ int main(void) {
   netif_set_default(&netif);
   netif_set_up(&netif);
 
+  mdns_resp_init();
+  char name[16];
+  snprintf(name, sizeof(name), "cangw%d", node_id());
+  mdns_resp_add_netif(&netif, name);
+
   for (int i = 0; i < CAN_IFACES; i++) {
     struct CANInterface *can_iface = &can_interfaces[i];
     cannelloni_handle_t *cannelloni = &can_iface->cannelloni;
-    IP_ADDR6(&cannelloni->Init.addr, 0xfe800000, 0x00000000, 0x5eb003c7, 0x958bfc58);
+    ip6_addr_copy(cannelloni->Init.addr, netif.ip6_addr[0]);
+
+    cannelloni->Init.addr.addr[0] = lwip_htonl(
+        ((0xFF00U | IP6_MULTICAST_SCOPE_LINK_LOCAL) << 16) | (IP6_ADDR_BLOCK2(&cannelloni->Init.addr)));
 
     cannelloni->Init.can_buf_size = CNL_BUF_SIZE;
     cannelloni->Init.can_rx_buf = can_interfaces->rx_buf;
@@ -101,6 +111,10 @@ int main(void) {
     can_iface->canreg = regs[i];
     can_init(regs[i]);
     init_cannelloni(cannelloni);
+
+    char srv_name[16];
+    snprintf(srv_name, sizeof(srv_name), "can-%d-%d", node_id(), i);
+    mdns_resp_add_service(&netif, srv_name, "_cannelloni", DNSSD_PROTO_UDP, cannelloni->Init.port, NULL, NULL);
   }
 
   if (node_id() == 2) {
