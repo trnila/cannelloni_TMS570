@@ -71,9 +71,6 @@
 #define EMAC_BUF_DESC_EOP 0x40000000U
 #define EMAC_BUF_DESC_EOQ 0x10000000U
 
-/* Address will be used to match incoming packets */
-#define EMAC_MACADDR_MATCH (0x00180000U)
-
 #define EMAC_DUPLEX_FULL (0x00000001U)
 #define EMAC_DUPLEX_HALF (0x00000000U)
 
@@ -317,30 +314,6 @@ void EMACMACSrcAddrSet(uint32_t emacBase, uint8_t macAddr[6]) {
 }
 
 /**
- * \brief   Sets the MAC Address in MACADDR registers.
- * \param   channel       Channel Number
- * \param   matchFilt     Match or Filter
- * \param   macAddr       Start address of a MAC address array.
- *                        The array[0] shall be the MSB of the MAC address
- *          matchFilt can take the following values \n
- *          EMAC_MACADDR_NO_MATCH_NO_FILTER - Address is not used to match
- *                                             or filter incoming packet. \n
- *          EMAC_MACADDR_FILTER - Address is used to filter incoming packets \n
- *          EMAC_MACADDR_MATCH - Address is used to match incoming packets \n
- **/
-void EMACMACAddrSet(uint32_t emacBase, uint32_t channel, uint8_t macAddr[6],
-                    uint32_t matchFilt) {
-  HWREG(emacBase + EMAC_MACINDEX) = channel;
-
-  HWREG(emacBase + EMAC_MACADDRHI) =
-      ((uint32_t)macAddr[0U] | ((uint32_t)macAddr[1U] << 8U) |
-       ((uint32_t)macAddr[2U] << 16U) | ((uint32_t)macAddr[3U] << 24U));
-  HWREG(emacBase + EMAC_MACADDRLO) =
-      ((uint32_t)macAddr[4U] | ((uint32_t)macAddr[5U] << 8U) | matchFilt |
-       (channel << 16U));
-}
-
-/**
  * \brief   Acknowledges an interrupt processed to the EMAC Control Core.
  * \param   eoiFlag       Type of interrupt to acknowledge to the EMAC Control
  *                         module.
@@ -373,38 +346,6 @@ void EMACTxCPWrite(uint32_t emacBase, uint32_t channel, uint32_t comPtr) {
  **/
 void EMACRxCPWrite(uint32_t emacBase, uint32_t channel, uint32_t comPtr) {
   HWREG(emacBase + EMAC_RXCP(channel)) = comPtr;
-}
-
-/**
- * \brief   Enables a specific channel to receive broadcast frames
- * \param   channel       Channel Number.
- **/
-void EMACRxBroadCastEnable(uint32_t emacBase, uint32_t channel) {
-  HWREG(emacBase + EMAC_RXMBPENABLE) &= (~(uint32_t)EMAC_RXMBPENABLE_RXBROADCH);
-
-  HWREG(emacBase + EMAC_RXMBPENABLE) |=
-      ((uint32_t)EMAC_RXMBPENABLE_RXBROADEN |
-       ((uint32_t)channel << (uint32_t)EMAC_RXMBPENABLE_RXBROADCH_SHIFT));
-}
-
-/**
- * \brief   Enables a specific channel to receive multicast frames
- * \param   channel       Channel Number.
- **/
-void EMACRxMultiCastEnable(uint32_t emacBase, uint32_t channel) {
-  HWREG(emacBase + EMAC_RXMBPENABLE) &= (~(uint32_t)EMAC_RXMBPENABLE_RXMULTCH);
-
-  HWREG(emacBase + EMAC_RXMBPENABLE) |=
-      ((uint32_t)EMAC_RXMBPENABLE_RXMULTEN | (channel));
-}
-
-/**
- * \brief   Enables unicast for a specific channel
- * \param   channel       Channel Number.
- **/
-
-void EMACRxUnicastSet(uint32_t emacBase, uint32_t channel) {
-  HWREG(emacBase + EMAC_RXUNICASTSET) |= ((uint32_t)1U << channel);
 }
 
 /**
@@ -605,18 +546,12 @@ static err_t hdkif_hw_init(struct netif *netif) {
   netif->flags = NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_LINK_UP;
 
   EMACInit(hdkif->emac_ctrl_base, hdkif->emac_base);
-  EMACRxBroadCastEnable(hdkif->emac_base, 0);
-
-  /* Set the MAC Addresses in EMAC hardware */
   EMACMACSrcAddrSet(hdkif->emac_base, netif->hwaddr);
-
-  for (channel = 0; channel < 8; channel++) {
-    EMACMACAddrSet(hdkif->emac_base, channel, netif->hwaddr,
-                   EMAC_MACADDR_MATCH);
-  }
-
   EMACDuplexSet(hdkif->emac_base, EMAC_DUPLEX_FULL);
   EMACRMIISpeedSet(hdkif->emac_base, EMAC_RMIISPEED_100MBPS);
+
+  /** receive all frames without HW MAC address filtering */
+  HWREG(hdkif->emac_base + EMAC_RXMBPENABLE) |= EMAC_RXMBPENABLE_RXCAFEN;
 
   txch = &(hdkif->txch);
 
@@ -694,7 +629,6 @@ static err_t hdkif_hw_init(struct netif *netif) {
   EMACCoreIntAck(hdkif->emac_base, EMAC_INT_CORE0_RX);
   EMACCoreIntAck(hdkif->emac_base, EMAC_INT_CORE0_TX);
 
-  EMACRxUnicastSet(hdkif->emac_base, 0);
   EMACNumFreeBufSet(hdkif->emac_base, 0, 10);
   EMACTxEnable(hdkif->emac_base);
   EMACRxEnable(hdkif->emac_base);
