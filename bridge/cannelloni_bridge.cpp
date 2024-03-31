@@ -285,7 +285,7 @@ class Discovery {
       exit(1);
     }
 
-    avahi_thread = std::thread([&] { avahi_simple_poll_loop(simple_poll); });
+    avahi_thread = std::thread([simple_poll] { avahi_simple_poll_loop(simple_poll); });
   }
 
   static void resolve_callback(
